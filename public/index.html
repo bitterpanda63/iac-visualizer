@@ -4,414 +4,1103 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>IaC Visualizer — AWS Terraform</title>
-
-  <!-- React Flow styles -->
   <link rel="stylesheet" href="https://esm.sh/reactflow@11/dist/style.css" />
   <link rel="stylesheet" href="/style.css" />
-
-</head>
-<body>
-  <div id="root"></div>
-
-  <script type="module">
-    // ── Imports ──────────────────────────────────────────────────────────────
-    import React, { useState, useCallback, useRef } from 'https://esm.sh/react@18';
-    import { createRoot } from 'https://esm.sh/react-dom@18/client';
-    import htm from 'https://esm.sh/htm@3';
-    import ReactFlow, {
-      useNodesState,
-      useEdgesState,
-      Controls,
-      MiniMap,
-      Background,
-      BackgroundVariant,
-      Position,
-      MarkerType,
-      Handle,
-      Panel,
-    } from 'https://esm.sh/reactflow@11?deps=react@18,react-dom@18';
-    import dagre from 'https://esm.sh/dagre@0.8.5';
-    import JSZip from 'https://esm.sh/jszip@3';
-
-    const html = htm.bind(React.createElement);
-
-    // ── AWS resource styles ──────────────────────────────────────────────────
-    const AWS_STYLES = {
-      aws_vpc:                         { icon: '🔷', color: '#1A73E8', bg: '#dbeafe', category: 'Network' },
-      aws_subnet:                      { icon: '🔹', color: '#0F9D58', bg: '#dcfce7', category: 'Subnet' },
-      aws_internet_gateway:            { icon: '🌐', color: '#0284c7', bg: '#e0f2fe', category: 'Gateway' },
-      aws_nat_gateway:                 { icon: '🔀', color: '#0369a1', bg: '#e0f2fe', category: 'Gateway' },
-      aws_route_table:                 { icon: '🗺️', color: '#0891b2', bg: '#cffafe', category: 'Routing' },
-      aws_instance:                    { icon: '💻', color: '#ea580c', bg: '#ffedd5', category: 'EC2' },
-      aws_launch_template:             { icon: '📋', color: '#c2410c', bg: '#ffedd5', category: 'EC2' },
-      aws_autoscaling_group:           { icon: '↔️', color: '#b45309', bg: '#fef3c7', category: 'Auto Scaling' },
-      aws_lambda_function:             { icon: '⚡', color: '#d97706', bg: '#fef3c7', category: 'Lambda' },
-      aws_db_instance:                 { icon: '🗄️', color: '#7c3aed', bg: '#ede9fe', category: 'RDS' },
-      aws_rds_cluster:                 { icon: '🗄️', color: '#6d28d9', bg: '#ede9fe', category: 'Aurora' },
-      aws_rds_cluster_instance:        { icon: '💾', color: '#7c3aed', bg: '#ede9fe', category: 'Aurora' },
-      aws_dynamodb_table:              { icon: '⚡', color: '#1d4ed8', bg: '#dbeafe', category: 'DynamoDB' },
-      aws_elasticache_cluster:         { icon: '🔴', color: '#be123c', bg: '#ffe4e6', category: 'ElastiCache' },
-      aws_elasticache_replication_group:{ icon: '🔴', color: '#be123c', bg: '#ffe4e6', category: 'ElastiCache' },
-      aws_s3_bucket:                   { icon: '🪣', color: '#475569', bg: '#f1f5f9', category: 'S3' },
-      aws_lb:                          { icon: '⚖️', color: '#0f766e', bg: '#ccfbf1', category: 'Load Balancer' },
-      aws_alb:                         { icon: '⚖️', color: '#0f766e', bg: '#ccfbf1', category: 'ALB' },
-      aws_lb_target_group:             { icon: '🎯', color: '#0d9488', bg: '#ccfbf1', category: 'Target Group' },
-      aws_lb_listener:                 { icon: '👂', color: '#0d9488', bg: '#ccfbf1', category: 'Listener' },
-      aws_api_gateway_rest_api:        { icon: '🔌', color: '#dc2626', bg: '#fee2e2', category: 'API GW' },
-      aws_api_gateway_v2_api:          { icon: '🔌', color: '#dc2626', bg: '#fee2e2', category: 'HTTP API' },
-      aws_api_gateway_stage:           { icon: '🚦', color: '#b91c1c', bg: '#fee2e2', category: 'Stage' },
-      aws_ecs_cluster:                 { icon: '🐳', color: '#0369a1', bg: '#e0f2fe', category: 'ECS Cluster' },
-      aws_ecs_service:                 { icon: '🔄', color: '#0284c7', bg: '#e0f2fe', category: 'ECS Service' },
-      aws_ecs_task_definition:         { icon: '📦', color: '#0ea5e9', bg: '#e0f2fe', category: 'Task Def' },
-      aws_eks_cluster:                 { icon: '☸️', color: '#1e40af', bg: '#dbeafe', category: 'EKS' },
-      aws_security_group:              { icon: '🛡️', color: '#b91c1c', bg: '#fee2e2', category: 'Security Group' },
-      aws_iam_role:                    { icon: '👤', color: '#5b21b6', bg: '#ede9fe', category: 'IAM Role' },
-      aws_iam_policy:                  { icon: '📜', color: '#6d28d9', bg: '#ede9fe', category: 'IAM Policy' },
-      aws_cloudfront_distribution:     { icon: '🌍', color: '#b45309', bg: '#fef3c7', category: 'CloudFront' },
-      aws_route53_zone:                { icon: '🗂️', color: '#166534', bg: '#dcfce7', category: 'Route 53' },
-      aws_route53_record:              { icon: '📡', color: '#15803d', bg: '#dcfce7', category: 'DNS Record' },
-      aws_sns_topic:                   { icon: '📢', color: '#c2410c', bg: '#ffedd5', category: 'SNS' },
-      aws_sqs_queue:                   { icon: '📬', color: '#4d7c0f', bg: '#f7fee7', category: 'SQS' },
-      aws_kinesis_stream:              { icon: '🌊', color: '#0369a1', bg: '#e0f2fe', category: 'Kinesis' },
-      aws_cloudwatch_log_group:        { icon: '📊', color: '#6b7280', bg: '#f9fafb', category: 'CloudWatch' },
-      aws_secretsmanager_secret:       { icon: '🔐', color: '#dc2626', bg: '#fee2e2', category: 'Secrets Mgr' },
-      aws_ssm_parameter:               { icon: '⚙️', color: '#374151', bg: '#f3f4f6', category: 'SSM' },
-      aws_ecr_repository:              { icon: '📦', color: '#0369a1', bg: '#e0f2fe', category: 'ECR' },
-      aws_codecommit_repository:       { icon: '💻', color: '#374151', bg: '#f3f4f6', category: 'CodeCommit' },
-      aws_codepipeline:                { icon: '🚀', color: '#6d28d9', bg: '#ede9fe', category: 'CodePipeline' },
-      default:                         { icon: '☁️', color: '#6b7280', bg: '#f3f4f6', category: 'AWS' },
-    };
-
-    // ── Dagre auto-layout ────────────────────────────────────────────────────
-    const NODE_W = 230;
-    const NODE_H = 110;
-
-    function buildFlow(resources, connections) {
-      const g = new dagre.graphlib.Graph();
-      g.setDefaultEdgeLabel(() => ({}));
-      g.setGraph({ rankdir: 'TB', nodesep: 70, ranksep: 90, marginx: 30, marginy: 30 });
-
-      const resourceIds = new Set(resources.map(r => r.id));
-
-      resources.forEach(r => g.setNode(r.id, { width: NODE_W, height: NODE_H }));
-
-      const validEdges = connections.filter(
-        c => resourceIds.has(c.from) && resourceIds.has(c.to) && c.from !== c.to
-      );
-      validEdges.forEach(c => g.setEdge(c.from, c.to));
-
-      dagre.layout(g);
-
-      const nodes = resources.map(r => {
-        const pos = g.node(r.id) || { x: 0, y: 0 };
-        return {
-          id: r.id,
-          type: 'awsNode',
-          position: { x: pos.x - NODE_W / 2, y: pos.y - NODE_H / 2 },
-          data: r,
-        };
-      });
-
-      const edges = validEdges.map((c, i) => ({
-        id: `e-${i}-${c.from}-${c.to}`,
-        source: c.from,
-        target: c.to,
-        label: c.label || '',
-        type: 'smoothstep',
-        markerEnd: { type: MarkerType.ArrowClosed, color: '#7c3aed' },
-        style: { stroke: '#7c3aed', strokeWidth: 1.5 },
-        labelStyle: { fontSize: 10, fill: '#7c3aed', fontWeight: 500 },
-        labelBgStyle: { fill: 'white', fillOpacity: 0.85 },
-        labelBgPadding: [3, 5],
-        labelBgBorderRadius: 4,
-      }));
-
-      return { nodes, edges };
+  <style>
+    /* ── New CSS variables for new features (extend style.css base) ──── */
+    :root {
+      --surface2: #f0e7ff;   /* hover/input surface  */
+      --in:       #22c55e;   /* incoming edge        */
+      --out:      #3b82f6;   /* outgoing edge        */
+      --path:     #d97706;   /* reachability path    */
     }
 
-    // ── Custom AWS Node ──────────────────────────────────────────────────────
-    const AwsNode = ({ data }) => {
-      const s = AWS_STYLES[data.type] || AWS_STYLES.default;
-      const propsEntries = Object.entries(data.props || {}).slice(0, 4);
+    /* Override diagram-screen: needs flex for sidebar layout */
+    .diagram-screen { flex: 1; display: flex; overflow: hidden; }
 
-      return html`
-        <div class="aws-node" style=${{ background: s.bg, borderColor: s.color }}>
-          <${Handle}
-            type="target"
-            position=${Position.Top}
-            style=${{ background: s.color, borderColor: '#fff' }}
-          />
+    /* ── New header elements ─────────────────────────────────────────── */
+    .header-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+    .header-diagram-name {
+      font-size: 13px; font-weight: 600; color: var(--text);
+      cursor: pointer; padding: 2px 6px; border-radius: 4px;
+      transition: background 0.15s;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      max-width: 240px;
+    }
+    .header-diagram-name:hover { background: var(--surface2); }
+    .header-name-input {
+      font-size: 13px; font-weight: 600;
+      background: var(--surface2); color: var(--text);
+      border: 1px solid var(--accent); border-radius: 4px;
+      padding: 2px 8px; outline: none; max-width: 240px;
+    }
+    .header-muted { font-size: 11px; color: var(--muted); }
 
-          <div class="aws-node-header">
-            <span class="aws-node-icon">${s.icon}</span>
-            <div class="aws-node-meta" style=${{ color: s.color }}>
-              <div class="aws-node-category">${s.category}</div>
-              <div class="aws-node-label" title=${data.label}>${data.label}</div>
-            </div>
-          </div>
+    /* ── Generic button ──────────────────────────────────────────────── */
+    .btn {
+      border: 1px solid var(--border);
+      background: var(--surface); color: var(--text);
+      border-radius: 7px; padding: 6px 14px;
+      font-size: 12px; font-weight: 500; cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+    .btn:hover { border-color: var(--accent); color: var(--accent); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-accent { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .btn-accent:hover { opacity: 0.85; color: #fff; }
+    .btn-danger:hover { border-color: #dc2626; color: #dc2626; }
+    .btn-sm { padding: 4px 10px; font-size: 11px; }
 
-          ${propsEntries.length > 0 && html`
-            <div class="aws-node-props" style=${{ borderTopColor: s.color + '44' }}>
-              ${propsEntries.map(([k, v]) => html`
-                <div key=${k} class="aws-node-prop" style=${{ color: s.color }}>
-                  <span class="aws-node-prop-key">${k}:</span> ${String(v).slice(0, 35)}
-                </div>
-              `)}
-            </div>
-          `}
+    /* ── Home screen ─────────────────────────────────────────────────── */
+    .home-screen {
+      flex: 1; overflow-y: auto; padding: 28px;
+      display: flex; flex-direction: column; gap: 20px;
+    }
+    .home-topbar { display: flex; align-items: center; gap: 12px; }
+    .home-topbar h2 { font-size: 18px; font-weight: 700; flex: 1; }
 
-          <${Handle}
-            type="source"
-            position=${Position.Bottom}
-            style=${{ background: s.color, borderColor: '#fff' }}
-          />
-        </div>
-      `;
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 14px;
+    }
+    .diagram-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px;
+      display: flex; flex-direction: column; gap: 10px;
+      cursor: pointer; transition: border-color 0.15s, transform 0.1s;
+    }
+    .diagram-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+    .card-icon-row { display: flex; gap: 4px; flex-wrap: wrap; min-height: 28px; }
+    .card-icon { font-size: 18px; }
+    .card-name {
+      font-size: 14px; font-weight: 600;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .card-name-input {
+      font-size: 14px; font-weight: 600; width: 100%;
+      background: var(--surface2); color: var(--text);
+      border: 1px solid var(--accent); border-radius: 4px;
+      padding: 2px 6px; outline: none;
+    }
+    .card-meta { font-size: 11px; color: var(--muted); line-height: 1.6; }
+    .card-level-row { display: flex; gap: 6px; margin-top: 2px; }
+    .level-pip {
+      font-size: 10px; font-weight: 700; padding: 1px 6px;
+      border-radius: 9999px; border: 1px solid;
+    }
+    .level-pip.l1 { color: #2563eb; border-color: #2563eb33; background: #2563eb11; }
+    .level-pip.l2 { color: #16a34a; border-color: #16a34a33; background: #16a34a11; }
+    .level-pip.l3 { color: #6b7280; border-color: #6b728033; background: #6b728011; }
+    .card-actions { display: flex; gap: 6px; }
+    .home-empty {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 14px;
+      color: var(--muted); text-align: center;
+    }
+    .home-empty-icon { font-size: 56px; opacity: 0.4; }
+    .home-empty h3 { font-size: 18px; font-weight: 700; color: var(--text); }
+    .home-empty p { font-size: 13px; line-height: 1.6; max-width: 340px; }
+
+    /* ── Left node sidebar ───────────────────────────────────────────── */
+    .node-sidebar {
+      width: 300px; flex-shrink: 0;
+      display: flex; flex-direction: column;
+      background: var(--surface); border-right: 1px solid var(--border);
+      overflow: hidden; transition: width 0.2s ease;
+    }
+    .node-sidebar.hidden { width: 0; }
+    .sidebar-header {
+      padding: 12px 14px; flex-shrink: 0;
+      display: flex; align-items: center; gap: 8px;
+      border-bottom: 2px solid var(--border);
+    }
+    .sidebar-header-info { flex: 1; min-width: 0; }
+    .sidebar-cat {
+      font-size: 9px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: 0.8px; opacity: 0.7;
+    }
+    .sidebar-label {
+      font-size: 13px; font-weight: 700;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .sidebar-close {
+      background: none; border: none; color: var(--muted);
+      cursor: pointer; font-size: 14px; padding: 4px; border-radius: 4px;
+      transition: color 0.15s;
+    }
+    .sidebar-close:hover { color: var(--text); }
+    .sidebar-props {
+      padding: 10px 14px; flex-shrink: 0;
+      border-bottom: 1px solid var(--border);
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .sidebar-prop { display: flex; gap: 8px; font-size: 11px; line-height: 1.5; overflow: hidden; }
+    .sidebar-prop-key { color: var(--muted); flex-shrink: 0; }
+    .sidebar-prop-val {
+      color: var(--text); overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap; font-family: monospace;
+    }
+    .sidebar-messages {
+      flex: 1; overflow-y: auto; padding: 12px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .chat-msg { padding: 9px 12px; border-radius: 9px; font-size: 12px; line-height: 1.6; }
+    .chat-msg.user {
+      background: var(--accent); color: #fff;
+      align-self: flex-end; max-width: 90%; border-radius: 9px 9px 2px 9px;
+    }
+    .chat-msg.assistant {
+      background: var(--bg); border: 1px solid var(--border);
+      color: var(--text); align-self: flex-start; border-radius: 9px 9px 9px 2px;
+    }
+    .chat-msg.assistant code {
+      background: var(--surface2); padding: 1px 4px;
+      border-radius: 3px; font-size: 11px; font-family: monospace;
+    }
+    .chat-msg.assistant strong { color: var(--accent); }
+    .chat-msg.assistant ul, .chat-msg.assistant ol { padding-left: 16px; margin: 4px 0; }
+
+    .typing-dots { display: flex; gap: 4px; align-items: center; padding: 2px 0; }
+    .typing-dots span {
+      width: 6px; height: 6px; background: var(--muted);
+      border-radius: 50%; animation: bounce 1.2s infinite;
+    }
+    .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-4px); } }
+
+    .sidebar-input-row {
+      padding: 10px 12px; flex-shrink: 0;
+      border-top: 1px solid var(--border);
+      display: flex; gap: 6px; align-items: flex-end;
+    }
+    .sidebar-input {
+      flex: 1; resize: none; background: var(--bg);
+      border: 1px solid var(--border); border-radius: 8px;
+      color: var(--text); padding: 8px 10px; font-size: 12px;
+      font-family: inherit; outline: none; line-height: 1.4;
+      transition: border-color 0.15s;
+    }
+    .sidebar-input:focus { border-color: var(--accent); }
+    .sidebar-send {
+      width: 32px; height: 32px; border-radius: 8px;
+      border: none; color: #fff; font-size: 16px;
+      cursor: pointer; flex-shrink: 0; display: flex;
+      align-items: center; justify-content: center; transition: opacity 0.15s;
+    }
+    .sidebar-send:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Flow canvas wrapper ─────────────────────────────────────────── */
+    .flow-container { flex: 1; position: relative; overflow: hidden; }
+
+    /* ── Level tabs and reachability toggle ──────────────────────────── */
+    .level-tabs { display: flex; gap: 4px; }
+    .level-tab {
+      padding: 5px 12px; font-size: 11px; font-weight: 600;
+      border: 1px solid var(--border); border-radius: 6px;
+      background: rgba(255,255,255,0.92); color: var(--muted);
+      cursor: pointer; backdrop-filter: blur(8px);
+      transition: all 0.15s; white-space: nowrap;
+    }
+    .level-tab:hover { border-color: var(--accent); color: var(--accent); }
+    .level-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+    .reach-btn {
+      padding: 5px 12px; font-size: 11px; font-weight: 600;
+      border: 1px solid var(--border); border-radius: 6px;
+      background: rgba(255,255,255,0.92); color: var(--muted);
+      cursor: pointer; backdrop-filter: blur(8px);
+      transition: all 0.15s; white-space: nowrap;
+    }
+    .reach-btn:hover { border-color: var(--path); color: var(--path); }
+    .reach-btn.active { background: var(--path); color: #fff; border-color: var(--path); }
+
+    .panel-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+    /* ── Scrollbar ───────────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 9999px; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="module">
+// ── Imports ───────────────────────────────────────────────────────────────────
+import React, {
+  useState, useCallback, useRef, useEffect, useMemo,
+} from 'https://esm.sh/react@18';
+import { createRoot } from 'https://esm.sh/react-dom@18/client';
+import htm from 'https://esm.sh/htm@3';
+import ReactFlow, {
+  useNodesState, useEdgesState,
+  Controls, MiniMap, Background, BackgroundVariant,
+  Position, MarkerType, Handle, Panel,
+} from 'https://esm.sh/reactflow@11?deps=react@18,react-dom@18';
+import dagre  from 'https://esm.sh/dagre@0.8.5';
+import JSZip  from 'https://esm.sh/jszip@3';
+
+const html = htm.bind(React.createElement);
+
+// ── AWS resource styles ───────────────────────────────────────────────────────
+const AWS_STYLES = {
+  aws_vpc:                          { icon:'🔷', color:'#1A73E8', bg:'#dbeafe', cat:'Network' },
+  aws_subnet:                       { icon:'🔹', color:'#0F9D58', bg:'#dcfce7', cat:'Subnet' },
+  aws_internet_gateway:             { icon:'🌐', color:'#0284c7', bg:'#e0f2fe', cat:'IGW' },
+  aws_nat_gateway:                  { icon:'🔀', color:'#0369a1', bg:'#e0f2fe', cat:'NAT GW' },
+  aws_route_table:                  { icon:'🗺️', color:'#0891b2', bg:'#cffafe', cat:'Route Table' },
+  aws_instance:                     { icon:'💻', color:'#ea580c', bg:'#ffedd5', cat:'EC2' },
+  aws_launch_template:              { icon:'📋', color:'#c2410c', bg:'#ffedd5', cat:'Launch Tmpl' },
+  aws_autoscaling_group:            { icon:'↔️', color:'#b45309', bg:'#fef3c7', cat:'Auto Scaling' },
+  aws_lambda_function:              { icon:'⚡', color:'#d97706', bg:'#fef3c7', cat:'Lambda' },
+  aws_db_instance:                  { icon:'🗄️', color:'#7c3aed', bg:'#ede9fe', cat:'RDS' },
+  aws_rds_cluster:                  { icon:'🗄️', color:'#6d28d9', bg:'#ede9fe', cat:'Aurora' },
+  aws_rds_cluster_instance:         { icon:'💾', color:'#7c3aed', bg:'#ede9fe', cat:'Aurora Node' },
+  aws_dynamodb_table:               { icon:'⚡', color:'#1d4ed8', bg:'#dbeafe', cat:'DynamoDB' },
+  aws_elasticache_cluster:          { icon:'🔴', color:'#be123c', bg:'#ffe4e6', cat:'ElastiCache' },
+  aws_elasticache_replication_group:{ icon:'🔴', color:'#be123c', bg:'#ffe4e6', cat:'ElastiCache' },
+  aws_s3_bucket:                    { icon:'🪣', color:'#475569', bg:'#f1f5f9', cat:'S3' },
+  aws_lb:                           { icon:'⚖️', color:'#0f766e', bg:'#ccfbf1', cat:'Load Balancer' },
+  aws_alb:                          { icon:'⚖️', color:'#0f766e', bg:'#ccfbf1', cat:'ALB' },
+  aws_lb_target_group:              { icon:'🎯', color:'#0d9488', bg:'#ccfbf1', cat:'Target Group' },
+  aws_lb_listener:                  { icon:'👂', color:'#0d9488', bg:'#ccfbf1', cat:'Listener' },
+  aws_api_gateway_rest_api:         { icon:'🔌', color:'#dc2626', bg:'#fee2e2', cat:'API GW' },
+  aws_api_gateway_v2_api:           { icon:'🔌', color:'#dc2626', bg:'#fee2e2', cat:'HTTP API' },
+  aws_api_gateway_stage:            { icon:'🚦', color:'#b91c1c', bg:'#fee2e2', cat:'Stage' },
+  aws_ecs_cluster:                  { icon:'🐳', color:'#0369a1', bg:'#e0f2fe', cat:'ECS Cluster' },
+  aws_ecs_service:                  { icon:'🔄', color:'#0284c7', bg:'#e0f2fe', cat:'ECS Service' },
+  aws_ecs_task_definition:          { icon:'📦', color:'#0ea5e9', bg:'#e0f2fe', cat:'Task Def' },
+  aws_eks_cluster:                  { icon:'☸️', color:'#1e40af', bg:'#dbeafe', cat:'EKS' },
+  aws_security_group:               { icon:'🛡️', color:'#b91c1c', bg:'#fee2e2', cat:'Security Group' },
+  aws_iam_role:                     { icon:'👤', color:'#5b21b6', bg:'#ede9fe', cat:'IAM Role' },
+  aws_iam_policy:                   { icon:'📜', color:'#6d28d9', bg:'#ede9fe', cat:'IAM Policy' },
+  aws_cloudfront_distribution:      { icon:'🌍', color:'#b45309', bg:'#fef3c7', cat:'CloudFront' },
+  aws_route53_zone:                 { icon:'🗂️', color:'#166534', bg:'#dcfce7', cat:'Route 53' },
+  aws_route53_record:               { icon:'📡', color:'#15803d', bg:'#dcfce7', cat:'DNS Record' },
+  aws_sns_topic:                    { icon:'📢', color:'#c2410c', bg:'#ffedd5', cat:'SNS' },
+  aws_sqs_queue:                    { icon:'📬', color:'#4d7c0f', bg:'#f7fee7', cat:'SQS' },
+  aws_kinesis_stream:               { icon:'🌊', color:'#0369a1', bg:'#e0f2fe', cat:'Kinesis' },
+  aws_cloudwatch_log_group:         { icon:'📊', color:'#6b7280', bg:'#f9fafb', cat:'CloudWatch' },
+  aws_secretsmanager_secret:        { icon:'🔐', color:'#dc2626', bg:'#fee2e2', cat:'Secrets Mgr' },
+  aws_ssm_parameter:                { icon:'⚙️', color:'#374151', bg:'#f3f4f6', cat:'SSM' },
+  aws_ecr_repository:               { icon:'📦', color:'#0369a1', bg:'#e0f2fe', cat:'ECR' },
+  aws_codepipeline:                 { icon:'🚀', color:'#6d28d9', bg:'#ede9fe', cat:'CodePipeline' },
+  default:                          { icon:'☁️', color:'#6b7280', bg:'#f3f4f6', cat:'AWS' },
+};
+
+// ── Dagre layout + flow builder ───────────────────────────────────────────────
+const NODE_W = 230;
+const NODE_H = 108;
+
+function buildFlow(resources, connections, internetPaths, detailLevel, showReachability) {
+  // 1. Filter by detail level
+  const visible   = (resources || []).filter(r => (r.level || 2) <= detailLevel);
+  const visibleIds = new Set(visible.map(r => r.id));
+
+  const visEdges = (connections || []).filter(
+    c => visibleIds.has(c.from) && visibleIds.has(c.to) && c.from !== c.to
+  );
+
+  // 2. Reachability sets
+  const reachEdges  = new Set();   // "from→to"
+  const entryNodes  = new Set();
+  const targetNodes = new Set();
+  const pathNodes   = new Set();
+
+  if (showReachability && internetPaths?.length) {
+    for (const p of internetPaths) {
+      // Only include path if the entry is visible
+      if (!visibleIds.has(p.entry)) continue;
+      entryNodes.add(p.entry);
+      targetNodes.add(p.target);
+      for (let i = 0; i < p.path.length - 1; i++) {
+        reachEdges.add(`${p.path[i]}→${p.path[i + 1]}`);
+        pathNodes.add(p.path[i]);
+        pathNodes.add(p.path[i + 1]);
+      }
+    }
+  }
+
+  // 3. Dagre layout
+  const g = new dagre.graphlib.Graph();
+  g.setDefaultEdgeLabel(() => ({}));
+  g.setGraph({ rankdir: 'TB', nodesep: 60, ranksep: 80, marginx: 20, marginy: 20 });
+
+  visible.forEach(r => g.setNode(r.id, { width: NODE_W, height: NODE_H }));
+  visEdges.forEach(c => g.setEdge(c.from, c.to));
+  dagre.layout(g);
+
+  // 4. Nodes
+  const nodes = visible.map(r => {
+    const pos = g.node(r.id) || { x: 0, y: 0 };
+    return {
+      id:       r.id,
+      type:     'awsNode',
+      position: { x: pos.x - NODE_W / 2, y: pos.y - NODE_H / 2 },
+      data: {
+        ...r,
+        isInternetEntry:      entryNodes.has(r.id),
+        isReachabilityTarget: targetNodes.has(r.id),
+        isOnPath:             pathNodes.has(r.id),
+        showReachability,
+      },
     };
+  });
 
-    const nodeTypes = { awsNode: AwsNode };
-
-    // ── Supported file extensions ────────────────────────────────────────────
-    const SUPPORTED_EXTENSIONS = ['.tf'];
-
-    // ── Upload Zone ──────────────────────────────────────────────────────────
-    const SUPPORTED = [
-      'aws_vpc', 'aws_subnet', 'aws_instance', 'aws_lambda_function',
-      'aws_db_instance', 'aws_rds_cluster', 'aws_s3_bucket', 'aws_lb / aws_alb',
-      'aws_ecs_cluster', 'aws_eks_cluster', 'aws_api_gateway', 'aws_dynamodb_table',
-      'aws_cloudfront', 'aws_route53', 'aws_sns_topic', 'aws_sqs_queue',
-      'aws_security_group', 'aws_iam_role', 'aws_elasticache', '+ more',
-    ];
-
-    const UploadZone = ({ onAnalyze, onError }) => {
-      const [dragging, setDragging] = useState(false);
-      const inputRef = useRef(null);
-
-      const processFile = useCallback(async (file) => {
-        if (!file) return;
-        if (!file.name.endsWith('.zip')) {
-          onError('Please upload a .zip archive containing your Terraform files.');
-          return;
-        }
-
-        try {
-          const zip = await JSZip.loadAsync(file);
-          const files = {};
-
-          await Promise.all(
-            Object.entries(zip.files)
-              .filter(([, f]) => !f.dir)
-              .map(async ([name, f]) => {
-                files[name] = await f.async('string');
-              })
-          );
-
-          onAnalyze(files);
-        } catch (e) {
-          onError('Failed to read the zip file: ' + e.message);
-        }
-      }, [onAnalyze, onError]);
-
-      return html`
-        <div class="upload-screen">
-          <h1 class="upload-headline">AWS Infrastructure Visualizer</h1>
-          <p class="upload-sub">
-            Upload a <strong>.zip</strong> of your Terraform project and get an interactive
-            diagram of your AWS resources — powered by Claude.
-          </p>
-
-          <div
-            class=${`upload-zone${dragging ? ' drag-over' : ''}`}
-            onClick=${() => inputRef.current?.click()}
-            onDragOver=${e => { e.preventDefault(); setDragging(true); }}
-            onDragLeave=${() => setDragging(false)}
-            onDrop=${e => {
-              e.preventDefault();
-              setDragging(false);
-              processFile(e.dataTransfer.files[0]);
-            }}
-          >
-            <input
-              ref=${inputRef}
-              type="file"
-              accept=".zip"
-              style=${{ display: 'none' }}
-              onChange=${e => processFile(e.target.files[0])}
-            />
-            <span class="upload-icon">📦</span>
-            <div class="upload-label">Drop your .zip here</div>
-            <div class="upload-hint">or click to browse</div>
-            <button class="upload-btn" onClick=${e => { e.stopPropagation(); inputRef.current?.click(); }}>
-              Choose .zip file
-            </button>
-          </div>
-        </div>
-      `;
+  // 5. Edges (base style — connectivity highlighting applied separately)
+  const edges = visEdges.map((c, i) => {
+    const onPath = reachEdges.has(`${c.from}→${c.to}`);
+    const hi     = showReachability && onPath;
+    return {
+      id:        `e-${i}-${c.from}-${c.to}`,
+      source:    c.from,
+      target:    c.to,
+      label:     hi ? (c.label || '') : '',
+      type:      'smoothstep',
+      animated:  hi,
+      markerEnd: { type: MarkerType.ArrowClosed, color: hi ? '#f59e0b' : '#7c3aed' },
+      style:     { stroke: hi ? '#f59e0b' : '#7c3aed', strokeWidth: hi ? 2.5 : 1.5 },
+      labelStyle:    { fontSize: 10, fill: hi ? '#f59e0b' : '#7c3aed', fontWeight: 600 },
+      labelBgStyle:  { fill: '#fff', fillOpacity: 0.85 },
+      labelBgPadding:[3, 5],
+      labelBgBorderRadius: 4,
     };
+  });
 
-    // ── Analyzing view ───────────────────────────────────────────────────────
-    const AnalyzingView = ({ files }) => html`
-      <div class="analyzing-screen">
-        <div class="analyzing-inner">
-          <div class="spinner"></div>
-          <div class="analyzing-title">Analyzing with Claude…</div>
-          <p class="analyzing-sub">
-            Claude is reading your Terraform files and mapping out the AWS resources
-            and their relationships. This usually takes 5–15 seconds.
-          </p>
-          <div class="file-list">
-            ${Object.keys(files).map(name => html`
-              <div key=${name} class="file-chip">
-                <span>📄</span>
-                <span>${name}</span>
-              </div>
-            `)}
-          </div>
+  return { nodes, edges };
+}
+
+// ── Simple inline markdown renderer (bold, code, bullets, line breaks) ────────
+function renderMarkdown(text) {
+  if (!text) return '';
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+    .replace(/^[-*] (.+)$/gm, '• $1')
+    .replace(/\n/g, '<br>');
+}
+
+// ── Custom AWS Node ───────────────────────────────────────────────────────────
+const AwsNode = ({ data }) => {
+  const s     = AWS_STYLES[data.type] || AWS_STYLES.default;
+  const props = Object.entries(data.props || {}).slice(0, 4);
+
+  // Reachability ring
+  let shadow = '';
+  if (data.showReachability) {
+    if (data.isInternetEntry)
+      shadow = `0 0 0 3px #f59e0b, 0 0 14px #f59e0b66`;
+    else if (data.isReachabilityTarget)
+      shadow = `0 0 0 3px #22c55e, 0 0 14px #22c55e66`;
+    else if (data.isOnPath)
+      shadow = `0 0 0 2px #f59e0b55`;
+  }
+
+  // Selected ring
+  if (data.isSelected)
+    shadow = `0 0 0 3px ${s.color}, 0 0 16px ${s.color}55`;
+
+  return html`
+    <div class="aws-node" style=${{ background: s.bg, borderColor: s.color, boxShadow: shadow || undefined }}>
+      <${Handle} type="target" position=${Position.Top}
+        style=${{ background: s.color, borderColor: '#fff' }} />
+
+      <div class="aws-node-header">
+        <span class="aws-node-icon">${s.icon}</span>
+        <div class="aws-node-meta" style=${{ color: s.color }}>
+          <div class="aws-node-category">${s.cat}</div>
+          <div class="aws-node-label" title=${data.label}>${data.label}</div>
         </div>
       </div>
-    `;
 
-    // ── Error view ───────────────────────────────────────────────────────────
-    const ErrorView = ({ message, onReset }) => html`
-      <div class="error-screen">
-        <span class="error-icon">⚠️</span>
-        <div class="error-title">Something went wrong</div>
-        <pre class="error-msg">${message}</pre>
-        <button class="reset-btn" onClick=${onReset}>← Try again</button>
-      </div>
-    `;
-
-    // ── Diagram view ─────────────────────────────────────────────────────────
-    const DiagramView = ({ diagramData, onReset }) => {
-      const { nodes: initNodes, edges: initEdges } = buildFlow(
-        diagramData.resources || [],
-        diagramData.connections || []
-      );
-
-      const [nodes, , onNodesChange] = useNodesState(initNodes);
-      const [edges, , onEdgesChange] = useEdgesState(initEdges);
-
-      const resourceCount  = (diagramData.resources || []).length;
-      const connectionCount = (diagramData.connections || []).length;
-
-      return html`
-        <div class="diagram-screen">
-          <${ReactFlow}
-            nodes=${nodes}
-            edges=${edges}
-            onNodesChange=${onNodesChange}
-            onEdgesChange=${onEdgesChange}
-            nodeTypes=${nodeTypes}
-            fitView
-            fitViewOptions=${{ padding: 0.15 }}
-            minZoom=${0.1}
-            maxZoom=${2.5}
-            attributionPosition="bottom-right"
-          >
-            <${Background}
-              variant=${BackgroundVariant.Dots}
-              gap=${20}
-              size=${1}
-              color="#e9d5ff"
-            />
-            <${Controls} />
-            <${MiniMap}
-              nodeColor=${(node) => {
-                const s = AWS_STYLES[node.data?.type] || AWS_STYLES.default;
-                return s.color;
-              }}
-              maskColor="rgba(124,58,237,0.12)"
-              style=${{ background: '#faf5ff', border: '1px solid #e9d5ff' }}
-            />
-
-            <!-- Summary panel (top-left) -->
-            <${Panel} position="top-left">
-              <div class="panel-card">
-                <h3>Infrastructure Summary</h3>
-                <p>${diagramData.summary || 'AWS infrastructure diagram'}</p>
-                <div class="stats-row">
-                  <span class="stat-chip">
-                    <span class="stat-num">${resourceCount}</span> resources
-                  </span>
-                  <span class="stat-chip">
-                    <span class="stat-num">${connectionCount}</span> connections
-                  </span>
-                </div>
-              </div>
-            </${Panel}>
-
-            <!-- Controls panel (top-right) -->
-            <${Panel} position="top-right">
-              <div class="panel-controls">
-                <button class="ctrl-btn" onClick=${onReset}>← New diagram</button>
-              </div>
-            </${Panel}>
-          </${ReactFlow}>
+      ${props.length > 0 && html`
+        <div class="aws-node-props" style=${{ borderTopColor: s.color + '44' }}>
+          ${props.map(([k, v]) => html`
+            <div key=${k} class="aws-node-prop" style=${{ color: s.color }}>
+              <span class="aws-node-prop-key">${k}: </span>${String(v).slice(0, 32)}
+            </div>
+          `)}
         </div>
-      `;
-    };
+      `}
 
-    // ── Root App ─────────────────────────────────────────────────────────────
-    const App = () => {
-      const [phase, setPhase]           = useState('upload');   // upload | analyzing | diagram | error
-      const [files, setFiles]           = useState({});
-      const [diagramData, setDiagramData] = useState(null);
-      const [error, setError]           = useState('');
+      <${Handle} type="source" position=${Position.Bottom}
+        style=${{ background: s.color, borderColor: '#fff' }} />
+    </div>
+  `;
+};
 
-      const handleAnalyze = useCallback(async (tfFiles) => {
-        setFiles(tfFiles);
-        setPhase('analyzing');
-        try {
-          const res = await fetch('/api/analyze', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ files: tfFiles }),
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
-          setDiagramData(data);
-          setPhase('diagram');
-        } catch (e) {
-          setError(e.message);
-          setPhase('error');
+const nodeTypes = { awsNode: AwsNode };
+
+// ── NodeSidebar ───────────────────────────────────────────────────────────────
+const NodeSidebar = ({ nodeData, diagramContext, onClose }) => {
+  const [messages,    setMessages]    = useState([]);
+  const [loading,     setLoading]     = useState(false);
+  const [input,       setInput]       = useState('');
+  const messagesEnd   = useRef(null);
+  const abortRef      = useRef(null);
+  const s             = AWS_STYLES[nodeData?.type] || AWS_STYLES.default;
+
+  // Auto-scroll
+  useEffect(() => {
+    messagesEnd.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Auto-explain when node changes
+  useEffect(() => {
+    if (!nodeData) return;
+    abortRef.current?.abort();
+    setMessages([]);
+    setInput('');
+    const initMsgs = [{ role: 'user', content: 'Explain this resource briefly.' }];
+    setMessages(initMsgs);
+    doStream(initMsgs);
+    return () => abortRef.current?.abort();
+  }, [nodeData?.id]);
+
+  const doStream = async (msgs) => {
+    setLoading(true);
+    setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      const res = await fetch('/api/chat', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal:  controller.signal,
+        body:    JSON.stringify({ nodeData, diagramContext, messages: msgs }),
+      });
+
+      const reader  = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (raw === '[DONE]') { setLoading(false); return; }
+          try {
+            const { text, error } = JSON.parse(raw);
+            if (text) {
+              setMessages(prev => {
+                const last = prev[prev.length - 1];
+                if (last?.role === 'assistant')
+                  return [...prev.slice(0, -1), { ...last, content: last.content + text }];
+                return prev;
+              });
+            }
+            if (error) throw new Error(error);
+          } catch (e) {
+            if (e.name !== 'AbortError' && !e.message.includes('JSON'))
+              throw e;
+          }
         }
-      }, []);
+      }
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last?.role === 'assistant')
+          return [...prev.slice(0, -1), { ...last, content: `⚠️ ${e.message}` }];
+        return [...prev, { role: 'assistant', content: `⚠️ ${e.message}` }];
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      const handleError = useCallback((msg) => {
-        setError(msg);
-        setPhase('error');
-      }, []);
+  const sendMessage = async () => {
+    if (!input.trim() || loading) return;
+    const newMsgs = [...messages, { role: 'user', content: input.trim() }];
+    setMessages(newMsgs);
+    setInput('');
+    await doStream(newMsgs);
+  };
 
-      const handleReset = useCallback(() => {
-        setPhase('upload');
-        setFiles({});
-        setDiagramData(null);
-        setError('');
-      }, []);
+  if (!nodeData) return null;
 
-      return html`
-        <div class="app">
-          <header class="header">
-            <span class="header-logo">🔍</span>
-            <span class="header-title">IaC Visualizer</span>
-            <span class="header-badge">AWS · Terraform</span>
-            <span class="header-spacer"></span>
-            ${phase === 'diagram' && html`
-              <span class="header-meta">Powered by Claude</span>
+  const props = Object.entries(nodeData.props || {});
+
+  return html`
+    <div class="node-sidebar">
+      <!-- Header -->
+      <div class="sidebar-header" style=${{ borderBottomColor: s.color + '66' }}>
+        <span style=${{ fontSize: '22px' }}>${s.icon}</span>
+        <div class="sidebar-header-info">
+          <div class="sidebar-cat" style=${{ color: s.color }}>${s.cat}</div>
+          <div class="sidebar-label" title=${nodeData.label}>${nodeData.label}</div>
+        </div>
+        <button class="sidebar-close" onClick=${onClose} title="Close">✕</button>
+      </div>
+
+      <!-- Props -->
+      ${props.length > 0 && html`
+        <div class="sidebar-props">
+          ${props.map(([k, v]) => html`
+            <div key=${k} class="sidebar-prop">
+              <span class="sidebar-prop-key">${k}</span>
+              <span class="sidebar-prop-val">${String(v)}</span>
+            </div>
+          `)}
+        </div>
+      `}
+
+      <!-- Chat messages -->
+      <div class="sidebar-messages">
+        ${messages.map((m, i) => html`
+          <div key=${i} class=${`chat-msg ${m.role}`}>
+            ${m.role === 'user'
+              ? m.content
+              : html`<div dangerouslySetInnerHTML=${{ __html: renderMarkdown(m.content) || (loading && i === messages.length - 1 ? '' : '&nbsp;') }}></div>`
+            }
+            ${m.role === 'assistant' && loading && i === messages.length - 1 && !m.content
+              ? html`<div class="typing-dots"><span></span><span></span><span></span></div>`
+              : null
+            }
+          </div>
+        `)}
+        <div ref=${messagesEnd}></div>
+      </div>
+
+      <!-- Input -->
+      <div class="sidebar-input-row">
+        <textarea
+          class="sidebar-input"
+          placeholder="Ask about this resource…"
+          value=${input}
+          rows=${2}
+          onInput=${e  => setInput(e.target.value)}
+          onKeyDown=${e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+        ></textarea>
+        <button
+          class="sidebar-send"
+          onClick=${sendMessage}
+          disabled=${loading || !input.trim()}
+          style=${{ background: s.color }}
+        >${loading ? '…' : '↑'}</button>
+      </div>
+    </div>
+  `;
+};
+
+// ── DiagramView ───────────────────────────────────────────────────────────────
+const DiagramView = ({ currentDiagram, onReset, onUpdate }) => {
+  const { resources = [], connections = [], internet_paths = [] } = currentDiagram;
+
+  const [detailLevel,      setDetailLevel]      = useState(2);
+  const [showReachability, setShowReachability] = useState(false);
+  const [selectedNodeData, setSelectedNodeData] = useState(null);
+  const [reanalyzing,      setReanalyzing]      = useState(false);
+
+  // Base flow (recomputed when filter/reachability changes)
+  const baseFlow = useMemo(
+    () => buildFlow(resources, connections, internet_paths, detailLevel, showReachability),
+    [resources, connections, internet_paths, detailLevel, showReachability]
+  );
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(baseFlow.nodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(baseFlow.edges);
+
+  // Sync when base flow changes (level / reachability toggle)
+  useEffect(() => {
+    setNodes(baseFlow.nodes);
+    setEdges(baseFlow.edges);
+    setSelectedNodeData(null); // clear selection on filter change
+  }, [baseFlow]);
+
+  // ── Connectivity highlight (derived from base, applied on top) ────────────
+  const displayNodes = useMemo(() => {
+    if (!selectedNodeData) return nodes;
+    const selId     = selectedNodeData.id;
+    const connected = new Set([selId]);
+    edges.forEach(e => {
+      if (e.source === selId) connected.add(e.target);
+      if (e.target === selId) connected.add(e.source);
+    });
+    return nodes.map(n => ({
+      ...n,
+      data:  { ...n.data, isSelected: n.id === selId },
+      style: connected.has(n.id) ? {} : { opacity: 0.25 },
+    }));
+  }, [nodes, selectedNodeData, edges]);
+
+  const displayEdges = useMemo(() => {
+    if (!selectedNodeData) return edges;
+    const selId = selectedNodeData.id;
+    return edges.map(e => {
+      if (e.target === selId)
+        return { ...e, animated: true,
+          markerEnd: { type: MarkerType.ArrowClosed, color: '#22c55e' },
+          style: { stroke: '#22c55e', strokeWidth: 2.5 },
+          label: e._baseLabel ?? e.label };
+      if (e.source === selId)
+        return { ...e, animated: true,
+          markerEnd: { type: MarkerType.ArrowClosed, color: '#3b82f6' },
+          style: { stroke: '#3b82f6', strokeWidth: 2.5 },
+          label: e._baseLabel ?? e.label };
+      return { ...e, animated: false,
+        style: { ...e.style, stroke: '#94a3b826', strokeWidth: 1 },
+        markerEnd: { ...e.markerEnd, color: '#94a3b826' } };
+    });
+  }, [edges, selectedNodeData]);
+
+  const onNodeClick = useCallback((_, node) => {
+    setSelectedNodeData(node.data);
+  }, []);
+
+  const onPaneClick = useCallback(() => {
+    setSelectedNodeData(null);
+  }, []);
+
+  const handleReanalyze = async () => {
+    setReanalyzing(true);
+    try {
+      const res = await fetch(`/api/diagrams/${currentDiagram.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reanalyze: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      onUpdate(data);
+    } catch (e) {
+      alert('Re-analyze failed: ' + e.message);
+    } finally {
+      setReanalyzing(false);
+    }
+  };
+
+  const diagramContext = {
+    connections: currentDiagram.connections,
+    summary:     currentDiagram.summary,
+  };
+
+  const LEVEL_LABELS = ['', 'Overview', 'Services', 'Full'];
+
+  return html`
+    <div class="diagram-screen">
+      <!-- Left sidebar -->
+      <div class=${`node-sidebar${selectedNodeData ? '' : ' hidden'}`}>
+        <${NodeSidebar}
+          nodeData=${selectedNodeData}
+          diagramContext=${diagramContext}
+          onClose=${() => setSelectedNodeData(null)}
+        />
+      </div>
+
+      <!-- React Flow canvas -->
+      <div class="flow-container">
+        <${ReactFlow}
+          nodes=${displayNodes}
+          edges=${displayEdges}
+          onNodesChange=${onNodesChange}
+          onEdgesChange=${onEdgesChange}
+          onNodeClick=${onNodeClick}
+          onPaneClick=${onPaneClick}
+          nodeTypes=${nodeTypes}
+          fitView
+          fitViewOptions=${{ padding: 0.15 }}
+          minZoom=${0.08}
+          maxZoom=${2.5}
+          attributionPosition="bottom-right"
+        >
+          <${Background} variant=${BackgroundVariant.Dots} gap=${20} size=${1} color="#cbd5e1" />
+          <${Controls} />
+          <${MiniMap}
+            nodeColor=${n => (AWS_STYLES[n.data?.type] || AWS_STYLES.default).color}
+            maskColor="rgba(250,245,255,0.7)"
+            style=${{ background: '#faf5ff', border: '1px solid #e9d5ff' }}
+          />
+
+          <!-- Summary (top-left) -->
+          <${Panel} position="top-left">
+            <div class="panel-card">
+              <h3>Infrastructure</h3>
+              <p>${currentDiagram.summary || 'AWS infrastructure diagram'}</p>
+              <div class="stats-row">
+                <span class="stat-chip"><span class="stat-num">${(resources || []).length}</span> resources</span>
+                <span class="stat-chip"><span class="stat-num">${(connections || []).length}</span> connections</span>
+                ${internet_paths?.length ? html`<span class="stat-chip"><span class="stat-num">${internet_paths.length}</span> paths</span>` : null}
+              </div>
+            </div>
+          </${Panel}>
+
+          <!-- Controls (top-right) -->
+          <${Panel} position="top-right">
+            <div class="panel-row">
+              <!-- Level tabs -->
+              <div class="level-tabs">
+                ${[1, 2, 3].map(l => html`
+                  <button
+                    key=${l}
+                    class=${`level-tab${detailLevel === l ? ' active' : ''}`}
+                    onClick=${() => setDetailLevel(l)}
+                    title=${l === 1 ? 'Entry points & VPCs only' : l === 2 ? 'Add compute & data services' : 'Show everything incl. config & IAM'}
+                  >${LEVEL_LABELS[l]}</button>
+                `)}
+              </div>
+
+              <!-- Reachability toggle -->
+              ${internet_paths?.length ? html`
+                <button
+                  class=${`reach-btn${showReachability ? ' active' : ''}`}
+                  onClick=${() => setShowReachability(v => !v)}
+                  title="Highlight traffic paths from the internet to compute"
+                >🌐 Paths</button>
+              ` : null}
+
+              <!-- Re-analyze -->
+              <button class="btn btn-sm" onClick=${handleReanalyze} disabled=${reanalyzing}>
+                ${reanalyzing ? '⟳ …' : '⟳ Re-analyze'}
+              </button>
+
+              <!-- Back -->
+              <button class="btn btn-sm" onClick=${onReset}>← Back</button>
+            </div>
+
+            <!-- Legend when reachability is active -->
+            ${showReachability && html`
+              <div style=${{ marginTop: '8px', display: 'flex', gap: '12px', fontSize: '11px', color: '#7e22ce', background: 'rgba(255,255,255,0.92)', borderRadius: '8px', padding: '7px 12px', backdropFilter: 'blur(8px)', border: '1px solid #e9d5ff' }}>
+                <span>🟡 Entry</span>
+                <span>🟢 Target</span>
+                <span style=${{ color: '#f59e0b' }}>— Path</span>
+              </div>
             `}
-          </header>
 
-          <div class="main">
-            ${phase === 'upload'    && html`<${UploadZone}   onAnalyze=${handleAnalyze} onError=${handleError} />`}
-            ${phase === 'analyzing' && html`<${AnalyzingView} files=${files} />`}
-            ${phase === 'diagram'   && html`<${DiagramView}   diagramData=${diagramData} onReset=${handleReset} />`}
-            ${phase === 'error'     && html`<${ErrorView}     message=${error} onReset=${handleReset} />`}
-          </div>
+            <!-- Connectivity legend when node selected -->
+            ${selectedNodeData && html`
+              <div style=${{ marginTop: '8px', display: 'flex', gap: '12px', fontSize: '11px', color: '#7e22ce', background: 'rgba(255,255,255,0.92)', borderRadius: '8px', padding: '7px 12px', backdropFilter: 'blur(8px)', border: '1px solid #e9d5ff' }}>
+                <span style=${{ color: '#22c55e' }}>→ Incoming</span>
+                <span style=${{ color: '#3b82f6' }}>→ Outgoing</span>
+              </div>
+            `}
+          </${Panel}>
+        </${ReactFlow}>
+      </div>
+    </div>
+  `;
+};
+
+// ── HomeScreen ────────────────────────────────────────────────────────────────
+const PREVIEW_TYPE_ICONS = type => (AWS_STYLES[type] || AWS_STYLES.default).icon;
+
+const HomeScreen = ({ onNewDiagram, onOpenDiagram }) => {
+  const [diagrams,   setDiagrams]   = useState(null);
+  const [editingId,  setEditingId]  = useState(null);
+  const [editName,   setEditName]   = useState('');
+  const [deletingId, setDeletingId] = useState(null);
+
+  const load = async () => {
+    try {
+      const res  = await fetch('/api/diagrams');
+      const data = await res.json();
+      setDiagrams(data);
+    } catch { setDiagrams([]); }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const startEdit = (d, e) => { e.stopPropagation(); setEditingId(d.id); setEditName(d.name); };
+  const saveEdit  = async (id) => {
+    await fetch(`/api/diagrams/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: editName }),
+    });
+    setDiagrams(prev => prev.map(d => d.id === id ? { ...d, name: editName } : d));
+    setEditingId(null);
+  };
+
+  const doDelete = async (id, e) => {
+    e.stopPropagation();
+    if (!confirm('Delete this diagram?')) return;
+    await fetch(`/api/diagrams/${id}`, { method: 'DELETE' });
+    setDiagrams(prev => prev.filter(d => d.id !== id));
+  };
+
+  const fmtDate = iso => {
+    if (!iso) return '';
+    const diff = Date.now() - new Date(iso);
+    if (diff < 60000)  return 'just now';
+    if (diff < 3600000) return `${Math.floor(diff/60000)}m ago`;
+    if (diff < 86400000) return `${Math.floor(diff/3600000)}h ago`;
+    return `${Math.floor(diff/86400000)}d ago`;
+  };
+
+  if (diagrams === null) return html`
+    <div class="analyzing-screen">
+      <div class="analyzing-inner"><div class="spinner"></div></div>
+    </div>
+  `;
+
+  return html`
+    <div class="home-screen">
+      <div class="home-topbar">
+        <h2>Diagrams</h2>
+        <button class="btn btn-accent" onClick=${onNewDiagram}>+ New Diagram</button>
+      </div>
+
+      ${diagrams.length === 0 ? html`
+        <div class="home-empty">
+          <span class="home-empty-icon">🗺️</span>
+          <h3>No diagrams yet</h3>
+          <p>Upload a <strong>.zip</strong> of your Terraform project to generate your first interactive infrastructure diagram.</p>
+          <button class="btn btn-accent" onClick=${onNewDiagram}>Create your first diagram</button>
         </div>
-      `;
-    };
+      ` : html`
+        <div class="cards-grid">
+          ${diagrams.map(d => html`
+            <div key=${d.id} class="diagram-card" onClick=${() => onOpenDiagram(d.id)}>
+              <!-- Preview icons -->
+              <div class="card-icon-row">
+                ${[...new Set(d.preview_types || [])].slice(0, 7).map((t, i) => html`
+                  <span key=${i} class="card-icon" title=${t}>${PREVIEW_TYPE_ICONS(t)}</span>
+                `)}
+              </div>
 
-    createRoot(document.getElementById('root')).render(html`<${App} />`);
-  </script>
+              <!-- Name -->
+              <div>
+                ${editingId === d.id ? html`
+                  <input
+                    class="card-name-input"
+                    value=${editName}
+                    onClick=${e => e.stopPropagation()}
+                    onInput=${e => setEditName(e.target.value)}
+                    onBlur=${() => saveEdit(d.id)}
+                    onKeyDown=${e => e.key === 'Enter' && saveEdit(d.id)}
+                    autoFocus
+                  />
+                ` : html`
+                  <div class="card-name">${d.name}</div>
+                `}
+              </div>
+
+              <!-- Meta -->
+              <div class="card-meta">
+                ${fmtDate(d.updated_at)} · ${d.resource_count} resources · ${d.connection_count} connections
+                <br />${d.summary ? d.summary.slice(0, 80) + (d.summary.length > 80 ? '…' : '') : ''}
+              </div>
+
+              <!-- Level breakdown -->
+              ${(d.level_counts?.l1 + d.level_counts?.l2 + d.level_counts?.l3) > 0 ? html`
+                <div class="card-level-row">
+                  ${d.level_counts.l1 ? html`<span class="level-pip l1">L1 ×${d.level_counts.l1}</span>` : null}
+                  ${d.level_counts.l2 ? html`<span class="level-pip l2">L2 ×${d.level_counts.l2}</span>` : null}
+                  ${d.level_counts.l3 ? html`<span class="level-pip l3">L3 ×${d.level_counts.l3}</span>` : null}
+                </div>
+              ` : null}
+
+              <!-- Actions -->
+              <div class="card-actions" onClick=${e => e.stopPropagation()}>
+                <button class="btn btn-sm" onClick=${() => onOpenDiagram(d.id)}>Open</button>
+                <button class="btn btn-sm" onClick=${e => startEdit(d, e)}>Rename</button>
+                <button class="btn btn-sm btn-danger" onClick=${e => doDelete(d.id, e)}>Delete</button>
+              </div>
+            </div>
+          `)}
+        </div>
+      `}
+    </div>
+  `;
+};
+
+// ── UploadZone ────────────────────────────────────────────────────────────────
+const SUPPORTED = [
+  'aws_vpc','aws_subnet','aws_instance','aws_lambda_function',
+  'aws_db_instance','aws_rds_cluster','aws_s3_bucket','aws_lb / aws_alb',
+  'aws_ecs_cluster','aws_eks_cluster','aws_api_gateway','aws_dynamodb_table',
+  'aws_cloudfront','aws_route53','aws_sns_topic','aws_sqs_queue',
+  'aws_security_group','aws_iam_role','aws_elasticache','+ more',
+];
+
+const UploadZone = ({ onAnalyze, onError }) => {
+  const [dragging, setDragging] = useState(false);
+  const inputRef = useRef(null);
+
+  const processFile = useCallback(async (file) => {
+    if (!file) return;
+    if (!file.name.endsWith('.zip')) { onError('Please upload a .zip file.'); return; }
+    try {
+      const zip   = await JSZip.loadAsync(file);
+      const files = {};
+      await Promise.all(
+        Object.entries(zip.files)
+          .filter(([, f]) => !f.dir)
+          .map(async ([name, f]) => { files[name] = await f.async('string'); })
+      );
+      onAnalyze(files, file.name);
+    } catch (e) { onError('Failed to read zip: ' + e.message); }
+  }, [onAnalyze, onError]);
+
+  return html`
+    <div class="upload-screen">
+      <h1 class="upload-headline">Upload Terraform Project</h1>
+      <p class="upload-sub">Drop a <strong>.zip</strong> containing your <code>.tf</code> files to generate an interactive AWS infrastructure diagram.</p>
+
+      <div
+        class=${`upload-zone${dragging ? ' drag-over' : ''}`}
+        onClick=${() => inputRef.current?.click()}
+        onDragOver=${e => { e.preventDefault(); setDragging(true); }}
+        onDragLeave=${() => setDragging(false)}
+        onDrop=${e => { e.preventDefault(); setDragging(false); processFile(e.dataTransfer.files[0]); }}
+      >
+        <input ref=${inputRef} type="file" accept=".zip" style=${{ display:'none' }}
+          onChange=${e => processFile(e.target.files[0])} />
+        <span class="upload-icon">📦</span>
+        <div class="upload-label">Drop your .zip here</div>
+        <div class="upload-hint">or click to browse</div>
+        <button class="btn btn-accent" style=${{ marginTop:'8px' }}
+          onClick=${e => { e.stopPropagation(); inputRef.current?.click(); }}>
+          Choose .zip file
+        </button>
+      </div>
+
+      <div class="supported-grid">
+        ${SUPPORTED.map(s => html`<span key=${s} class="supported-chip">${s}</span>`)}
+      </div>
+    </div>
+  `;
+};
+
+// ── App ───────────────────────────────────────────────────────────────────────
+const App = () => {
+  const [phase,          setPhase]          = useState('home');
+  const [analyzingFiles, setAnalyzingFiles] = useState({});
+  const [currentDiagram, setCurrentDiagram] = useState(null);
+  const [error,          setError]          = useState('');
+  const [editingName,    setEditingName]    = useState(false);
+  const [nameVal,        setNameVal]        = useState('');
+  const nameInputRef = useRef(null);
+
+  const handleNewDiagram = () => setPhase('upload');
+
+  const handleAnalyze = useCallback(async (files, zipName) => {
+    setAnalyzingFiles(files);
+    setPhase('analyzing');
+    try {
+      const res = await fetch('/api/diagrams/analyze', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files, zipName }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
+      setCurrentDiagram(data);
+      setPhase('diagram');
+    } catch (e) { setError(e.message); setPhase('error'); }
+  }, []);
+
+  const handleOpenDiagram = useCallback(async (id) => {
+    try {
+      const res = await fetch(`/api/diagrams/${id}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setCurrentDiagram(data);
+      setPhase('diagram');
+    } catch (e) { setError(e.message); setPhase('error'); }
+  }, []);
+
+  const handleError   = useCallback(msg => { setError(msg); setPhase('error'); }, []);
+  const handleReset   = useCallback(() => { setPhase('home'); setCurrentDiagram(null); setError(''); }, []);
+  const handleUpdate  = useCallback(data => setCurrentDiagram(data), []);
+
+  const startNameEdit = () => { setNameVal(currentDiagram?.name || ''); setEditingName(true); };
+  const saveNameEdit  = async () => {
+    if (!nameVal.trim() || !currentDiagram) { setEditingName(false); return; }
+    await fetch(`/api/diagrams/${currentDiagram.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: nameVal }),
+    });
+    setCurrentDiagram(prev => ({ ...prev, name: nameVal }));
+    setEditingName(false);
+  };
+
+  useEffect(() => { if (editingName) nameInputRef.current?.focus(); }, [editingName]);
+
+  const inDiagram = phase === 'diagram' && currentDiagram;
+
+  return html`
+    <div class="app">
+      <!-- Header -->
+      <header class="header">
+        <span class="header-logo">🔍</span>
+        <span class="header-title">IaC Visualizer</span>
+        <span class="header-badge">AWS · Terraform</span>
+
+        ${(phase === 'upload' || inDiagram) ? html`
+          <div class="header-sep"></div>
+          <button class="btn btn-sm" onClick=${handleReset}>← Back</button>
+        ` : null}
+
+        ${inDiagram ? html`
+          <div class="header-sep"></div>
+          ${editingName ? html`
+            <input ref=${nameInputRef} class="header-name-input"
+              value=${nameVal}
+              onInput=${e => setNameVal(e.target.value)}
+              onBlur=${saveNameEdit}
+              onKeyDown=${e => { if (e.key === 'Enter') saveNameEdit(); if (e.key === 'Escape') setEditingName(false); }}
+            />
+          ` : html`
+            <span class="header-diagram-name" onClick=${startNameEdit} title="Click to rename">
+              ${currentDiagram.name}
+            </span>
+          `}
+        ` : null}
+
+        <div class="header-spacer"></div>
+        ${inDiagram ? html`<span class="header-muted">Powered by Claude</span>` : null}
+      </header>
+
+      <!-- Main -->
+      <div class="main">
+        ${phase === 'home'      && html`<${HomeScreen}  onNewDiagram=${handleNewDiagram} onOpenDiagram=${handleOpenDiagram} />`}
+        ${phase === 'upload'    && html`<${UploadZone}  onAnalyze=${handleAnalyze} onError=${handleError} />`}
+        ${phase === 'analyzing' && html`
+          <div class="analyzing-screen">
+            <div class="analyzing-inner">
+              <div class="spinner"></div>
+              <div class="analyzing-title">Analyzing with Claude…</div>
+              <p class="analyzing-sub">Claude is mapping your AWS resources and their relationships. Usually 10–20 seconds.</p>
+              <div class="file-list">
+                ${Object.keys(analyzingFiles).filter(n => n.endsWith('.tf')).slice(0, 8).map(n => html`
+                  <div key=${n} class="file-chip"><span>📄</span><span>${n}</span></div>
+                `)}
+              </div>
+            </div>
+          </div>
+        `}
+        ${phase === 'diagram' && currentDiagram && html`
+          <${DiagramView}
+            currentDiagram=${currentDiagram}
+            onReset=${handleReset}
+            onUpdate=${handleUpdate}
+          />
+        `}
+        ${phase === 'error' && html`
+          <div class="error-screen">
+            <span class="error-icon">⚠️</span>
+            <div class="error-title">Something went wrong</div>
+            <pre class="error-msg">${error}</pre>
+            <button class="btn" onClick=${handleReset}>← Back to home</button>
+          </div>
+        `}
+      </div>
+    </div>
+  `;
+};
+
+createRoot(document.getElementById('root')).render(html`<${App} />`);
+</script>
 </body>
 </html>
