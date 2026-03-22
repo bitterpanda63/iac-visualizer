@@ -541,6 +541,9 @@
 
     const nodeTypes = { awsNode: AwsNode };
 
+    // ── Supported file extensions ────────────────────────────────────────────
+    const SUPPORTED_EXTENSIONS = ['.tf'];
+
     // ── Upload Zone ──────────────────────────────────────────────────────────
     const SUPPORTED = [
       'aws_vpc', 'aws_subnet', 'aws_instance', 'aws_lambda_function',
@@ -563,22 +566,17 @@
 
         try {
           const zip = await JSZip.loadAsync(file);
-          const tfFiles = {};
+          const files = {};
 
           await Promise.all(
             Object.entries(zip.files)
-              .filter(([name, f]) => !f.dir && name.endsWith('.tf'))
+              .filter(([, f]) => !f.dir)
               .map(async ([name, f]) => {
-                tfFiles[name] = await f.async('string');
+                files[name] = await f.async('string');
               })
           );
 
-          if (Object.keys(tfFiles).length === 0) {
-            onError('No .tf files found in the zip. Make sure your archive contains Terraform configuration files.');
-            return;
-          }
-
-          onAnalyze(tfFiles);
+          onAnalyze(files);
         } catch (e) {
           onError('Failed to read the zip file: ' + e.message);
         }

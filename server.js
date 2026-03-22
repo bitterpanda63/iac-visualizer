@@ -15,6 +15,7 @@ app.use(express.static(join(__dirname, 'public')));
 const PORT = process.env.PORT || 3000;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
+const SUPPORTED_EXTENSIONS = ['.tf'];
 
 // ─── Claude prompt ────────────────────────────────────────────────────────────
 
@@ -136,7 +137,12 @@ async function callClaude(files) {
   try {
     return extractJSON(raw);
   } catch (e) {
-    throw new Error(`Failed to parse Claude response as JSON: ${e.message}\n\nRaw response:\n${raw.slice(0, 500)}`);
+    console.warn('[analyze] Initial parse failed, attempting JSON repair…');
+    try {
+      return await repairJSON(raw);
+    } catch (e2) {
+      throw new Error(`Failed to parse Claude response as JSON: ${e.message}\n\nRaw response:\n${raw.slice(0, 500)}`);
+    }
   }
 }
 
@@ -151,7 +157,10 @@ app.post('/api/analyze', async (req, res) => {
     }
 
     const tfFiles = Object.fromEntries(
-      Object.entries(files).filter(([name]) => name.endsWith('.tf'))
+      Object.entries(files).filter(([name]) =>
+        !name.startsWith('__MACOSX') &&
+        SUPPORTED_EXTENSIONS.some(ext => name.endsWith(ext))
+      )
     );
 
     if (Object.keys(tfFiles).length === 0) {
