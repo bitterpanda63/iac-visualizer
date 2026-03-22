@@ -165,7 +165,7 @@ html, body, #root {
   margin: auto;
   padding: 40px 20px;
   width: 100%;
-  max-width: 400px;
+  max-width: 760px;
 }
 .spinner {
   width: 52px;
@@ -188,10 +188,10 @@ html, body, #root {
   line-height: 1.6;
 }
 .file-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: repeat(4, auto);
+  grid-auto-flow: column;
   gap: 6px;
-  max-width: 400px;
   width: 100%;
   padding-bottom: 16px;
 }
@@ -206,6 +206,13 @@ html, body, #root {
   font-size: 12px;
   font-family: monospace;
   color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+}
+.file-chip span:last-child {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ── Error screen ────────────────────────────────────── */
