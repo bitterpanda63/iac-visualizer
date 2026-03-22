@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IaC Visualizer — AWS Terraform</title>
+
+  <!-- React Flow styles -->
+  <link rel="stylesheet" href="https://esm.sh/reactflow@11/dist/style.css" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0f172a;
+      --surface:  #1e293b;
+      --border:   #334155;
+      --text:     #e2e8f0;
+      --muted:    #94a3b8;
+      --accent:   #f59e0b;
+      --accent2:  #3b82f6;
+    }
+
+    html, body, #root {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    /* ── Header ─────────────────────────────────────────── */
+    .header {
+      height: 52px;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 10px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .header-logo { font-size: 22px; }
+    .header-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: -0.2px;
+    }
+    .header-badge {
+      font-size: 11px;
+      font-weight: 600;
+      background: var(--accent);
+      color: #000;
+      padding: 2px 7px;
+      border-radius: 9999px;
+      margin-left: 4px;
+      letter-spacing: 0.3px;
+    }
+    .header-spacer { flex: 1; }
+    .header-meta {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* ── Layout ──────────────────────────────────────────── */
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+    .main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* ── Upload screen ───────────────────────────────────── */
+    .upload-screen {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 40px;
+    }
+    .upload-headline {
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--text);
+      text-align: center;
+    }
+    .upload-sub {
+      font-size: 14px;
+      color: var(--muted);
+      text-align: center;
+      max-width: 420px;
+      line-height: 1.6;
+    }
+    .upload-zone {
+      width: 100%;
+      max-width: 500px;
+      border: 2px dashed var(--border);
+      border-radius: 16px;
+      padding: 48px 32px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      background: var(--surface);
+      text-align: center;
+    }
+    .upload-zone:hover,
+    .upload-zone.drag-over {
+      border-color: var(--accent);
+      background: #1e293bcc;
+    }
+    .upload-icon { font-size: 48px; }
+    .upload-label {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .upload-hint {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .upload-btn {
+      margin-top: 8px;
+      background: var(--accent);
+      color: #000;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 24px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .upload-btn:hover { opacity: 0.85; }
+
+    .supported-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      max-width: 540px;
+    }
+    .supported-chip {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    /* ── Analyzing screen ────────────────────────────────── */
+    .analyzing-screen {
+      flex: 1;
+      overflow-y: auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .analyzing-inner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 24px;
+      margin: auto;
+      padding: 40px 20px;
+      width: 100%;
+      max-width: 400px;
+    }
+    .spinner {
+      width: 52px;
+      height: 52px;
+      border: 4px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .analyzing-title {
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .analyzing-sub {
+      font-size: 13px;
+      color: var(--muted);
+      text-align: center;
+      max-width: 360px;
+      line-height: 1.6;
+    }
+    .file-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-width: 400px;
+      width: 100%;
+      padding-bottom: 16px;
+    }
+    .file-chip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-family: monospace;
+      color: var(--muted);
+    }
+
+    /* ── Error screen ────────────────────────────────────── */
+    .error-screen {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 40px;
+    }
+    .error-icon { font-size: 48px; }
+    .error-title { font-size: 20px; font-weight: 700; color: #f87171; }
+    .error-msg {
+      font-size: 13px;
+      color: var(--muted);
+      max-width: 480px;
+      text-align: center;
+      line-height: 1.7;
+      font-family: monospace;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .reset-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 10px 22px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .reset-btn:hover { border-color: var(--accent); }
+
+    /* ── Diagram screen ──────────────────────────────────── */
+    .diagram-screen {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* ── Floating panels ─────────────────────────────────── */
+    .panel-card {
+      background: rgba(15, 23, 42, 0.88);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 16px;
+      backdrop-filter: blur(8px);
+      font-size: 13px;
+      max-width: 280px;
+    }
+    .panel-card h3 {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+    .panel-card p { color: var(--muted); line-height: 1.5; }
+
+    .panel-controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .ctrl-btn {
+      background: rgba(15, 23, 42, 0.88);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 8px 14px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      transition: border-color 0.2s;
+      white-space: nowrap;
+    }
+    .ctrl-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    .stats-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 8px;
+    }
+    .stat-chip {
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .stat-num {
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    /* ── Custom AWS node ─────────────────────────────────── */
+    .aws-node {
+      border-radius: 10px;
+      border: 2px solid transparent;
+      padding: 10px 14px;
+      min-width: 180px;
+      max-width: 240px;
+      cursor: default;
+      transition: box-shadow 0.15s;
+    }
+    .aws-node:hover {
+      box-shadow: 0 0 0 3px rgba(245,158,11,0.3);
+    }
+    .aws-node-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .aws-node-icon { font-size: 22px; flex-shrink: 0; }
+    .aws-node-meta { min-width: 0; }
+    .aws-node-category {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      opacity: 0.7;
+    }
+    .aws-node-label {
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .aws-node-props {
+      margin-top: 8px;
+      padding-top: 7px;
+      border-top: 1px solid rgba(0,0,0,0.12);
+    }
+    .aws-node-prop {
+      font-size: 10.5px;
+      opacity: 0.75;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.5;
+    }
+    .aws-node-prop-key { opacity: 0.55; }
+
+    /* Make React Flow handles less intrusive */
+    .react-flow__handle {
+      width: 8px !important;
+      height: 8px !important;
+      border-width: 2px !important;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="module">
+    // ── Imports ──────────────────────────────────────────────────────────────
+    import React, { useState, useCallback, useRef } from 'https://esm.sh/react@18';
+    import { createRoot } from 'https://esm.sh/react-dom@18/client';
+    import htm from 'https://esm.sh/htm@3';
+    import ReactFlow, {
+      useNodesState,
+      useEdgesState,
+      Controls,
+      MiniMap,
+      Background,
+      BackgroundVariant,
+      Position,
+      MarkerType,
+      Handle,
+      Panel,
+    } from 'https://esm.sh/reactflow@11?deps=react@18,react-dom@18';
+    import dagre from 'https://esm.sh/dagre@0.8.5';
+    import JSZip from 'https://esm.sh/jszip@3';
+
+    const html = htm.bind(React.createElement);
+
+    // ── AWS resource styles ──────────────────────────────────────────────────
+    const AWS_STYLES = {
+      aws_vpc:                         { icon: '🔷', color: '#1A73E8', bg: '#dbeafe', category: 'Network' },
+      aws_subnet:                      { icon: '🔹', color: '#0F9D58', bg: '#dcfce7', category: 'Subnet' },
+      aws_internet_gateway:            { icon: '🌐', color: '#0284c7', bg: '#e0f2fe', category: 'Gateway' },
+      aws_nat_gateway:                 { icon: '🔀', color: '#0369a1', bg: '#e0f2fe', category: 'Gateway' },
+      aws_route_table:                 { icon: '🗺️', color: '#0891b2', bg: '#cffafe', category: 'Routing' },
+      aws_instance:                    { icon: '💻', color: '#ea580c', bg: '#ffedd5', category: 'EC2' },
+      aws_launch_template:             { icon: '📋', color: '#c2410c', bg: '#ffedd5', category: 'EC2' },
+      aws_autoscaling_group:           { icon: '↔️', color: '#b45309', bg: '#fef3c7', category: 'Auto Scaling' },
+      aws_lambda_function:             { icon: '⚡', color: '#d97706', bg: '#fef3c7', category: 'Lambda' },
+      aws_db_instance:                 { icon: '🗄️', color: '#7c3aed', bg: '#ede9fe', category: 'RDS' },
+      aws_rds_cluster:                 { icon: '🗄️', color: '#6d28d9', bg: '#ede9fe', category: 'Aurora' },
+      aws_rds_cluster_instance:        { icon: '💾', color: '#7c3aed', bg: '#ede9fe', category: 'Aurora' },
+      aws_dynamodb_table:              { icon: '⚡', color: '#1d4ed8', bg: '#dbeafe', category: 'DynamoDB' },
+      aws_elasticache_cluster:         { icon: '🔴', color: '#be123c', bg: '#ffe4e6', category: 'ElastiCache' },
+      aws_elasticache_replication_group:{ icon: '🔴', color: '#be123c', bg: '#ffe4e6', category: 'ElastiCache' },
+      aws_s3_bucket:                   { icon: '🪣', color: '#475569', bg: '#f1f5f9', category: 'S3' },
+      aws_lb:                          { icon: '⚖️', color: '#0f766e', bg: '#ccfbf1', category: 'Load Balancer' },
+      aws_alb:                         { icon: '⚖️', color: '#0f766e', bg: '#ccfbf1', category: 'ALB' },
+      aws_lb_target_group:             { icon: '🎯', color: '#0d9488', bg: '#ccfbf1', category: 'Target Group' },
+      aws_lb_listener:                 { icon: '👂', color: '#0d9488', bg: '#ccfbf1', category: 'Listener' },
+      aws_api_gateway_rest_api:        { icon: '🔌', color: '#dc2626', bg: '#fee2e2', category: 'API GW' },
+      aws_api_gateway_v2_api:          { icon: '🔌', color: '#dc2626', bg: '#fee2e2', category: 'HTTP API' },
+      aws_api_gateway_stage:           { icon: '🚦', color: '#b91c1c', bg: '#fee2e2', category: 'Stage' },
+      aws_ecs_cluster:                 { icon: '🐳', color: '#0369a1', bg: '#e0f2fe', category: 'ECS Cluster' },
+      aws_ecs_service:                 { icon: '🔄', color: '#0284c7', bg: '#e0f2fe', category: 'ECS Service' },
+      aws_ecs_task_definition:         { icon: '📦', color: '#0ea5e9', bg: '#e0f2fe', category: 'Task Def' },
+      aws_eks_cluster:                 { icon: '☸️', color: '#1e40af', bg: '#dbeafe', category: 'EKS' },
+      aws_security_group:              { icon: '🛡️', color: '#b91c1c', bg: '#fee2e2', category: 'Security Group' },
+      aws_iam_role:                    { icon: '👤', color: '#5b21b6', bg: '#ede9fe', category: 'IAM Role' },
+      aws_iam_policy:                  { icon: '📜', color: '#6d28d9', bg: '#ede9fe', category: 'IAM Policy' },
+      aws_cloudfront_distribution:     { icon: '🌍', color: '#b45309', bg: '#fef3c7', category: 'CloudFront' },
+      aws_route53_zone:                { icon: '🗂️', color: '#166534', bg: '#dcfce7', category: 'Route 53' },
+      aws_route53_record:              { icon: '📡', color: '#15803d', bg: '#dcfce7', category: 'DNS Record' },
+      aws_sns_topic:                   { icon: '📢', color: '#c2410c', bg: '#ffedd5', category: 'SNS' },
+      aws_sqs_queue:                   { icon: '📬', color: '#4d7c0f', bg: '#f7fee7', category: 'SQS' },
+      aws_kinesis_stream:              { icon: '🌊', color: '#0369a1', bg: '#e0f2fe', category: 'Kinesis' },
+      aws_cloudwatch_log_group:        { icon: '📊', color: '#6b7280', bg: '#f9fafb', category: 'CloudWatch' },
+      aws_secretsmanager_secret:       { icon: '🔐', color: '#dc2626', bg: '#fee2e2', category: 'Secrets Mgr' },
+      aws_ssm_parameter:               { icon: '⚙️', color: '#374151', bg: '#f3f4f6', category: 'SSM' },
+      aws_ecr_repository:              { icon: '📦', color: '#0369a1', bg: '#e0f2fe', category: 'ECR' },
+      aws_codecommit_repository:       { icon: '💻', color: '#374151', bg: '#f3f4f6', category: 'CodeCommit' },
+      aws_codepipeline:                { icon: '🚀', color: '#6d28d9', bg: '#ede9fe', category: 'CodePipeline' },
+      default:                         { icon: '☁️', color: '#6b7280', bg: '#f3f4f6', category: 'AWS' },
+    };
+
+    // ── Dagre auto-layout ────────────────────────────────────────────────────
+    const NODE_W = 230;
+    const NODE_H = 110;
+
+    function buildFlow(resources, connections) {
+      const g = new dagre.graphlib.Graph();
+      g.setDefaultEdgeLabel(() => ({}));
+      g.setGraph({ rankdir: 'TB', nodesep: 70, ranksep: 90, marginx: 30, marginy: 30 });
+
+      const resourceIds = new Set(resources.map(r => r.id));
+
+      resources.forEach(r => g.setNode(r.id, { width: NODE_W, height: NODE_H }));
+
+      const validEdges = connections.filter(
+        c => resourceIds.has(c.from) && resourceIds.has(c.to) && c.from !== c.to
+      );
+      validEdges.forEach(c => g.setEdge(c.from, c.to));
+
+      dagre.layout(g);
+
+      const nodes = resources.map(r => {
+        const pos = g.node(r.id) || { x: 0, y: 0 };
+        return {
+          id: r.id,
+          type: 'awsNode',
+          position: { x: pos.x - NODE_W / 2, y: pos.y - NODE_H / 2 },
+          data: r,
+        };
+      });
+
+      const edges = validEdges.map((c, i) => ({
+        id: `e-${i}-${c.from}-${c.to}`,
+        source: c.from,
+        target: c.to,
+        label: c.label || '',
+        type: 'smoothstep',
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#64748b' },
+        style: { stroke: '#64748b', strokeWidth: 1.5 },
+        labelStyle: { fontSize: 10, fill: '#64748b', fontWeight: 500 },
+        labelBgStyle: { fill: 'white', fillOpacity: 0.85 },
+        labelBgPadding: [3, 5],
+        labelBgBorderRadius: 4,
+      }));
+
+      return { nodes, edges };
+    }
+
+    // ── Custom AWS Node ──────────────────────────────────────────────────────
+    const AwsNode = ({ data }) => {
+      const s = AWS_STYLES[data.type] || AWS_STYLES.default;
+      const propsEntries = Object.entries(data.props || {}).slice(0, 4);
+
+      return html`
+        <div class="aws-node" style=${{ background: s.bg, borderColor: s.color }}>
+          <${Handle}
+            type="target"
+            position=${Position.Top}
+            style=${{ background: s.color, borderColor: '#fff' }}
+          />
+
+          <div class="aws-node-header">
+            <span class="aws-node-icon">${s.icon}</span>
+            <div class="aws-node-meta" style=${{ color: s.color }}>
+              <div class="aws-node-category">${s.category}</div>
+              <div class="aws-node-label" title=${data.label}>${data.label}</div>
+            </div>
+          </div>
+
+          ${propsEntries.length > 0 && html`
+            <div class="aws-node-props" style=${{ borderTopColor: s.color + '44' }}>
+              ${propsEntries.map(([k, v]) => html`
+                <div key=${k} class="aws-node-prop" style=${{ color: s.color }}>
+                  <span class="aws-node-prop-key">${k}:</span> ${String(v).slice(0, 35)}
+                </div>
+              `)}
+            </div>
+          `}
+
+          <${Handle}
+            type="source"
+            position=${Position.Bottom}
+            style=${{ background: s.color, borderColor: '#fff' }}
+          />
+        </div>
+      `;
+    };
+
+    const nodeTypes = { awsNode: AwsNode };
+
+    // ── Upload Zone ──────────────────────────────────────────────────────────
+    const SUPPORTED = [
+      'aws_vpc', 'aws_subnet', 'aws_instance', 'aws_lambda_function',
+      'aws_db_instance', 'aws_rds_cluster', 'aws_s3_bucket', 'aws_lb / aws_alb',
+      'aws_ecs_cluster', 'aws_eks_cluster', 'aws_api_gateway', 'aws_dynamodb_table',
+      'aws_cloudfront', 'aws_route53', 'aws_sns_topic', 'aws_sqs_queue',
+      'aws_security_group', 'aws_iam_role', 'aws_elasticache', '+ more',
+    ];
+
+    const UploadZone = ({ onAnalyze, onError }) => {
+      const [dragging, setDragging] = useState(false);
+      const inputRef = useRef(null);
+
+      const processFile = useCallback(async (file) => {
+        if (!file) return;
+        if (!file.name.endsWith('.zip')) {
+          onError('Please upload a .zip archive containing your Terraform files.');
+          return;
+        }
+
+        try {
+          const zip = await JSZip.loadAsync(file);
+          const tfFiles = {};
+
+          await Promise.all(
+            Object.entries(zip.files)
+              .filter(([name, f]) => !f.dir && name.endsWith('.tf'))
+              .map(async ([name, f]) => {
+                tfFiles[name] = await f.async('string');
+              })
+          );
+
+          if (Object.keys(tfFiles).length === 0) {
+            onError('No .tf files found in the zip. Make sure your archive contains Terraform configuration files.');
+            return;
+          }
+
+          onAnalyze(tfFiles);
+        } catch (e) {
+          onError('Failed to read the zip file: ' + e.message);
+        }
+      }, [onAnalyze, onError]);
+
+      return html`
+        <div class="upload-screen">
+          <h1 class="upload-headline">AWS Infrastructure Visualizer</h1>
+          <p class="upload-sub">
+            Upload a <strong>.zip</strong> of your Terraform project and get an interactive
+            diagram of your AWS resources — powered by Claude.
+          </p>
+
+          <div
+            class=${`upload-zone${dragging ? ' drag-over' : ''}`}
+            onClick=${() => inputRef.current?.click()}
+            onDragOver=${e => { e.preventDefault(); setDragging(true); }}
+            onDragLeave=${() => setDragging(false)}
+            onDrop=${e => {
+              e.preventDefault();
+              setDragging(false);
+              processFile(e.dataTransfer.files[0]);
+            }}
+          >
+            <input
+              ref=${inputRef}
+              type="file"
+              accept=".zip"
+              style=${{ display: 'none' }}
+              onChange=${e => processFile(e.target.files[0])}
+            />
+            <span class="upload-icon">📦</span>
+            <div class="upload-label">Drop your .zip here</div>
+            <div class="upload-hint">or click to browse</div>
+            <button class="upload-btn" onClick=${e => { e.stopPropagation(); inputRef.current?.click(); }}>
+              Choose .zip file
+            </button>
+          </div>
+        </div>
+      `;
+    };
+
+    // ── Analyzing view ───────────────────────────────────────────────────────
+    const AnalyzingView = ({ files }) => html`
+      <div class="analyzing-screen">
+        <div class="analyzing-inner">
+          <div class="spinner"></div>
+          <div class="analyzing-title">Analyzing with Claude…</div>
+          <p class="analyzing-sub">
+            Claude is reading your Terraform files and mapping out the AWS resources
+            and their relationships. This usually takes 5–15 seconds.
+          </p>
+          <div class="file-list">
+            ${Object.keys(files).map(name => html`
+              <div key=${name} class="file-chip">
+                <span>📄</span>
+                <span>${name}</span>
+              </div>
+            `)}
+          </div>
+        </div>
+      </div>
+    `;
+
+    // ── Error view ───────────────────────────────────────────────────────────
+    const ErrorView = ({ message, onReset }) => html`
+      <div class="error-screen">
+        <span class="error-icon">⚠️</span>
+        <div class="error-title">Something went wrong</div>
+        <pre class="error-msg">${message}</pre>
+        <button class="reset-btn" onClick=${onReset}>← Try again</button>
+      </div>
+    `;
+
+    // ── Diagram view ─────────────────────────────────────────────────────────
+    const DiagramView = ({ diagramData, onReset }) => {
+      const { nodes: initNodes, edges: initEdges } = buildFlow(
+        diagramData.resources || [],
+        diagramData.connections || []
+      );
+
+      const [nodes, , onNodesChange] = useNodesState(initNodes);
+      const [edges, , onEdgesChange] = useEdgesState(initEdges);
+
+      const resourceCount  = (diagramData.resources || []).length;
+      const connectionCount = (diagramData.connections || []).length;
+
+      return html`
+        <div class="diagram-screen">
+          <${ReactFlow}
+            nodes=${nodes}
+            edges=${edges}
+            onNodesChange=${onNodesChange}
+            onEdgesChange=${onEdgesChange}
+            nodeTypes=${nodeTypes}
+            fitView
+            fitViewOptions=${{ padding: 0.15 }}
+            minZoom=${0.1}
+            maxZoom=${2.5}
+            attributionPosition="bottom-right"
+          >
+            <${Background}
+              variant=${BackgroundVariant.Dots}
+              gap=${20}
+              size=${1}
+              color="#cbd5e1"
+            />
+            <${Controls} />
+            <${MiniMap}
+              nodeColor=${(node) => {
+                const s = AWS_STYLES[node.data?.type] || AWS_STYLES.default;
+                return s.color;
+              }}
+              maskColor="rgba(15,23,42,0.6)"
+              style=${{ background: '#1e293b', border: '1px solid #334155' }}
+            />
+
+            <!-- Summary panel (top-left) -->
+            <${Panel} position="top-left">
+              <div class="panel-card">
+                <h3>Infrastructure Summary</h3>
+                <p>${diagramData.summary || 'AWS infrastructure diagram'}</p>
+                <div class="stats-row">
+                  <span class="stat-chip">
+                    <span class="stat-num">${resourceCount}</span> resources
+                  </span>
+                  <span class="stat-chip">
+                    <span class="stat-num">${connectionCount}</span> connections
+                  </span>
+                </div>
+              </div>
+            </${Panel}>
+
+            <!-- Controls panel (top-right) -->
+            <${Panel} position="top-right">
+              <div class="panel-controls">
+                <button class="ctrl-btn" onClick=${onReset}>← New diagram</button>
+              </div>
+            </${Panel}>
+          </${ReactFlow}>
+        </div>
+      `;
+    };
+
+    // ── Root App ─────────────────────────────────────────────────────────────
+    const App = () => {
+      const [phase, setPhase]           = useState('upload');   // upload | analyzing | diagram | error
+      const [files, setFiles]           = useState({});
+      const [diagramData, setDiagramData] = useState(null);
+      const [error, setError]           = useState('');
+
+      const handleAnalyze = useCallback(async (tfFiles) => {
+        setFiles(tfFiles);
+        setPhase('analyzing');
+        try {
+          const res = await fetch('/api/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ files: tfFiles }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
+          setDiagramData(data);
+          setPhase('diagram');
+        } catch (e) {
+          setError(e.message);
+          setPhase('error');
+        }
+      }, []);
+
+      const handleError = useCallback((msg) => {
+        setError(msg);
+        setPhase('error');
+      }, []);
+
+      const handleReset = useCallback(() => {
+        setPhase('upload');
+        setFiles({});
+        setDiagramData(null);
+        setError('');
+      }, []);
+
+      return html`
+        <div class="app">
+          <header class="header">
+            <span class="header-logo">🔍</span>
+            <span class="header-title">IaC Visualizer</span>
+            <span class="header-badge">AWS · Terraform</span>
+            <span class="header-spacer"></span>
+            ${phase === 'diagram' && html`
+              <span class="header-meta">Powered by Claude</span>
+            `}
+          </header>
+
+          <div class="main">
+            ${phase === 'upload'    && html`<${UploadZone}   onAnalyze=${handleAnalyze} onError=${handleError} />`}
+            ${phase === 'analyzing' && html`<${AnalyzingView} files=${files} />`}
+            ${phase === 'diagram'   && html`<${DiagramView}   diagramData=${diagramData} onReset=${handleReset} />`}
+            ${phase === 'error'     && html`<${ErrorView}     message=${error} onReset=${handleReset} />`}
+          </div>
+        </div>
+      `;
+    };
+
+    createRoot(document.getElementById('root')).render(html`<${App} />`);
+  </script>
+</body>
+</html>
